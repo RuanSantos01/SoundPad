@@ -297,14 +297,24 @@ body.editing .pad::before {
 .sheet-panel {
   width: min(520px, 100%);
   max-height: 88dvh;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  /* Rodapé fora da área que rola: sem isso a barra de ações fica flutuando
+   * por cima do último campo e corta as cores pela metade. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--panel);
   border: 1px solid var(--line);
   border-bottom: 0;
   border-radius: 22px 22px 0 0;
-  padding: 8px 20px calc(22px + env(safe-area-inset-bottom));
+  padding: 8px 20px calc(14px + env(safe-area-inset-bottom));
   animation: rise .22s ease-out;
+}
+
+.sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 @keyframes rise { from { transform: translateY(14%); opacity: .6; } }
 
@@ -337,15 +347,14 @@ body.editing .pad::before {
 
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
-/* A ação principal precisa estar sempre à mão: em tela de celular o painel
- * rola por dentro, então a linha de botões fica grudada no rodapé dele. */
+/* A ação principal fica sempre à mão, no rodapé do painel, enquanto os campos
+ * rolam acima dela. */
 .row.end {
-  position: sticky;
-  bottom: 0;
+  flex: 0 0 auto;
   justify-content: flex-end;
-  margin-top: 20px;
-  padding: 12px 0 calc(6px + env(safe-area-inset-bottom));
-  background: linear-gradient(to bottom, transparent, var(--panel) 30%);
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
 }
 
 .btn {
