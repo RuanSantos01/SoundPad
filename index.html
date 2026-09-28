@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SoundPad">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0a12">
+<title>SoundPad</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="bar">
+      <div class="brand">
+        <span class="dot" id="statusDot" title="estado do áudio"></span>
+        <strong>SoundPad</strong>
+      </div>
+      <div class="bar-actions">
+        <button id="btnStop" class="chip" type="button">Parar</button>
+        <button id="btnEdit" class="chip" type="button" aria-pressed="false">Editar</button>
+      </div>
+    </header>
+
+    <nav id="folders" class="folders" aria-label="Pastas de sons"></nav>
+
+    <main id="grid" class="grid" aria-label="Pads"></main>
+
+    <footer class="bar footer">
+      <label class="vol">
+        <span aria-hidden="true">VOL</span>
+        <input id="master" type="range" min="0" max="100" value="90" aria-label="Volume geral">
+      </label>
+      <span id="hint" class="hint">Toque em um pad</span>
+    </footer>
+  </div>
+
+  <div id="sheet" class="sheet" hidden>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+      <div class="sheet-grab"></div>
+      <h2 id="sheetTitle">Pad 1</h2>
+
+      <label class="field">
+        <span>Nome</span>
+        <input id="fName" type="text" maxlength="14" autocomplete="off" autocapitalize="none">
+      </label>
+
+      <div class="field">
+        <span>Som</span>
+        <div class="row">
+          <button id="fPick" class="btn" type="button">Escolher arquivos…</button>
+          <button id="fReset" class="btn ghost" type="button">Padrão</button>
+        </div>
+        <small id="fFile" class="muted">som padrão</small>
+      </div>
+
+      <div class="field">
+        <span>Modo</span>
+        <div class="seg" id="fMode" role="radiogroup">
+          <button type="button" data-mode="oneshot" role="radio">Disparo</button>
+          <button type="button" data-mode="gate" role="radio">Enquanto segura</button>
+          <button type="button" data-mode="loop" role="radio">Loop</button>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>Volume do pad — <b id="fVolVal">100%</b></span>
+        <input id="fVol" type="range" min="0" max="150" value="100">
+      </label>
+
+      <label class="field cbx">
+        <input id="fChoke" type="checkbox">
+        <span>Reiniciar ao tocar de novo (corta o som anterior)</span>
+      </label>
+
+      <div class="field">
+        <span>Cor</span>
+        <div class="colors" id="fColors"></div>
+      </div>
+
+      <div class="row end">
+        <button id="fTest" class="btn ghost" type="button">Testar</button>
+        <button id="fDone" class="btn primary" type="button">Concluir</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="folderSheet" class="sheet" hidden>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="gTitle">
+      <div class="sheet-grab"></div>
+      <h2 id="gTitle">Nova pasta</h2>
+
+      <label class="field">
+        <span>Nome</span>
+        <input id="gName" type="text" maxlength="18" autocomplete="off" placeholder="Ex.: Live, Podcast, Memes">
+      </label>
+
+      <div class="field" id="gSuggestField">
+        <span>Sugestões</span>
+        <div class="chips" id="gSuggest"></div>
+      </div>
+
+      <div class="field" id="gKitField">
+        <span>Começar com</span>
+        <div class="seg" id="gKit" role="radiogroup">
+          <button type="button" data-kit="empty" role="radio">Pads vazios</button>
+          <button type="button" data-kit="drums" role="radio">Kit de bateria</button>
+        </div>
+      </div>
+
+      <div class="field" id="gBulkField">
+        <span>Sons</span>
+        <div class="row">
+          <button id="gBulk" class="btn" type="button">Carregar vários sons…</button>
+        </div>
+        <small id="gStatus" class="muted"></small>
+      </div>
+
+      <div class="row end">
+        <button id="gDelete" class="btn danger" type="button">Apagar pasta</button>
+        <button id="gSave" class="btn primary" type="button">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <input id="filePicker" type="file" accept="audio/*,.mp3,.m4a,.wav,.aac,.caf,.ogg" multiple hidden>
+  <input id="bulkPicker" type="file" accept="audio/*,.mp3,.m4a,.wav,.aac,.caf,.ogg" multiple hidden>
+  <script src="app.js"></script>
+</body>
+</html>

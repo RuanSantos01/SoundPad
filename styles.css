@@ -1,0 +1,402 @@
+:root {
+  --bg: #0a0a12;
+  --panel: #14141f;
+  --line: #262636;
+  --text: #ecebf5;
+  --muted: #8b89a6;
+  --accent: #6c5ce7;
+  --pad-r: 16px;
+  --gap: 10px;
+}
+
+* { box-sizing: border-box; }
+
+/* Qualquer `display` declarado aqui vence o `[hidden]` do navegador, e o JS
+ * esconde coisas por esse atributo. Uma regra só evita o problema todo. */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  /* No iOS um toque longo abre lupa/seleção e atrasa o som. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* ---------- barras ---------- */
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  flex: 0 0 auto;
+}
+
+.brand { display: flex; align-items: center; gap: 8px; letter-spacing: .3px; }
+.brand strong { font-size: 15px; font-weight: 650; }
+
+.dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: #4b4b63;
+  transition: background .2s, box-shadow .2s;
+}
+.dot.live { background: #2ecc71; box-shadow: 0 0 10px #2ecc71aa; }
+
+.bar-actions { display: flex; gap: 8px; }
+
+.chip {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.chip:active { transform: scale(.96); }
+.chip[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.footer { padding-top: 4px; }
+
+.vol { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.vol span { font-size: 11px; color: var(--muted); letter-spacing: 1px; }
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  background: transparent;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px; height: 20px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: var(--text);
+}
+input[type="range"]::-moz-range-track { height: 4px; border-radius: 2px; background: var(--line); }
+input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: 50%; background: var(--text); }
+
+.hint { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+/* ---------- barra de pastas ---------- */
+
+.folders {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  padding: 2px 14px 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+}
+.folders::-webkit-scrollbar { display: none; }
+
+.fchip {
+  flex: 0 0 auto;
+  scroll-snap-align: center;
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  padding: 7px 15px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.fchip:active { transform: scale(.96); }
+.fchip[aria-current="true"] {
+  background: #ffffff10;
+  border-color: #ffffff2e;
+  color: var(--text);
+}
+.fchip.add { padding: 7px 14px; font-size: 16px; line-height: 1; color: var(--muted); }
+
+body.editing .fchip[aria-current="true"]::after { content: " ✎"; opacity: .6; }
+
+/* No modo editar o gesto é do arrasto, não da rolagem da barra. */
+body.editing .fchip { touch-action: none; }
+body.editing .folders { scroll-snap-type: none; }
+body.dragging-folder { cursor: grabbing; }
+body.dragging-folder .fchip:not(.dragging) { transition: transform .16s ease-out; }
+
+.fchip.dragging {
+  position: relative;
+  z-index: 5;
+  border-color: #ffffff45;
+  background: #20202e;
+  color: var(--text);
+  box-shadow: 0 10px 24px #000000a6;
+  transform-origin: center;
+}
+
+.chip.hot { border-color: #ffffff36; color: #fff; }
+
+/* ---------- grade de pads ---------- */
+
+.grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: 1fr;
+  gap: var(--gap);
+  padding: 4px 14px 10px;
+}
+
+.pad {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 9px 7px;
+  text-align: center;
+  border: 1px solid #ffffff14;
+  border-radius: var(--pad-r);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--c) 34%, transparent), color-mix(in srgb, var(--c) 8%, transparent)),
+    var(--panel);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  /* o pad nunca deve rolar/zoomar a página */
+  touch-action: none;
+  transition: transform .06s ease-out, box-shadow .12s ease-out;
+  will-change: transform;
+}
+
+.pad .label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.15;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pad .sub {
+  font-size: 9px;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.pad .glow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--c) 85%, white 15%), transparent 68%);
+  opacity: 0;
+  pointer-events: none;
+}
+.pad.hit .glow {
+  opacity: .85;
+  transition: opacity .34s ease-out;
+}
+.pad.hit {
+  transform: scale(.955);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--c) 55%, transparent);
+}
+
+.pad.playing { border-color: color-mix(in srgb, var(--c) 70%, transparent); }
+.pad.playing::after {
+  content: "";
+  position: absolute;
+  top: 8px; right: 8px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: 0 0 8px var(--c);
+}
+
+.pad.custom .sub { color: color-mix(in srgb, var(--c) 70%, var(--muted)); }
+
+/* pad sem som: convida a receber um arquivo */
+.pad.empty {
+  background: var(--panel);
+  border-style: dashed;
+  border-color: #ffffff1f;
+}
+.pad.empty .label { font-size: 22px; font-weight: 300; color: var(--muted); }
+.pad.empty .sub { opacity: .75; }
+.pad.empty.hit { box-shadow: none; }
+
+body.editing .pad {
+  animation: wiggle 1.6s ease-in-out infinite;
+}
+body.editing .pad::before {
+  content: "✎";
+  position: absolute;
+  top: 6px; left: 9px;
+  font-size: 12px;
+  color: var(--muted);
+}
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-.35deg); }
+  50% { transform: rotate(.35deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.editing .pad { animation: none; }
+}
+
+/* ---------- painel de ajustes ---------- */
+
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: #000000a8;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.sheet-panel {
+  width: min(520px, 100%);
+  max-height: 88dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 22px 22px 0 0;
+  padding: 8px 20px calc(22px + env(safe-area-inset-bottom));
+  animation: rise .22s ease-out;
+}
+@keyframes rise { from { transform: translateY(14%); opacity: .6; } }
+
+.sheet-grab {
+  width: 40px; height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  margin: 6px auto 12px;
+}
+
+.sheet h2 { margin: 0 0 16px; font-size: 17px; }
+
+.field { display: block; margin-bottom: 16px; }
+.field > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 7px; }
+.field.cbx { display: flex; align-items: center; gap: 10px; }
+.field.cbx span { margin: 0; font-size: 12px; color: var(--muted); }
+.field.cbx input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+.field input[type="text"] {
+  width: 100%;
+  font: inherit;
+  /* < 16px faz o iOS dar zoom ao focar o campo */
+  font-size: 16px;
+  color: var(--text);
+  background: #0d0d16;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px 12px;
+}
+
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* A ação principal precisa estar sempre à mão: em tela de celular o painel
+ * rola por dentro, então a linha de botões fica grudada no rodapé dele. */
+.row.end {
+  position: sticky;
+  bottom: 0;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding: 12px 0 calc(6px + env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent, var(--panel) 30%);
+}
+
+.btn {
+  appearance: none;
+  font: inherit;
+  font-size: 14px;
+  padding: 11px 16px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: #0d0d16;
+  color: var(--text);
+  cursor: pointer;
+}
+.btn:active { transform: scale(.97); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn.ghost { background: transparent; }
+.btn.danger { border-color: #ff4d6d59; color: #ff6b81; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip.sm { font-size: 12px; padding: 6px 12px; color: var(--muted); }
+
+.muted { color: var(--muted); font-size: 11px; display: block; margin-top: 8px; }
+
+.seg { display: flex; border: 1px solid var(--line); border-radius: 11px; overflow: hidden; }
+.seg button {
+  flex: 1;
+  appearance: none;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: #0d0d16;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  padding: 11px 4px;
+  cursor: pointer;
+}
+.seg button:last-child { border-right: 0; }
+.seg button[aria-checked="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+
+.colors { display: flex; gap: 9px; flex-wrap: wrap; }
+.colors button {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: var(--c);
+  cursor: pointer;
+  padding: 0;
+}
+.colors button[aria-pressed="true"] { border-color: var(--text); }
+
+@media (min-width: 720px) {
+  .grid { padding: 8px 20px 14px; --gap: 14px; }
+  .pad .label { font-size: 14px; }
+}
