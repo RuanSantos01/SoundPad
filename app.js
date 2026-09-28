@@ -353,6 +353,57 @@ async function removePad(p) {
   try { (await tx(PADS, 'readwrite')).delete(p.folderId + ':' + p.id); } catch {}
 }
 
+/* ============== armazenamento persistente ============== */
+/* Medido no Safari do iOS (simulador, iPhone 16 Pro): numa aba comum o
+ * navegador NEGA o pedido; aberto pela Tela de Início (standalone) ele CONCEDE.
+ * Com a permissão, o sistema para de apagar os sons sozinho — por inatividade
+ * (a regra dos 7 dias do Safari) ou por falta de espaço.
+ * Isso NÃO protege de "Limpar dados dos sites" nem de apagar o ícone: para
+ * esses casos só um backup resolve. */
+
+let persistente = false;
+
+const naTelaDeInicio = () =>
+  navigator.standalone === true ||
+  window.matchMedia('(display-mode: standalone)').matches;
+
+const pareceIOS = () =>
+  /iPad|iPhone|iPod/.test(navigator.platform || '') ||
+  (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform || '')) ||
+  navigator.standalone !== undefined;
+
+async function pedirPersistencia() {
+  try {
+    if (!navigator.storage?.persist) return;
+    persistente = await navigator.storage.persisted();
+    if (!persistente) persistente = await navigator.storage.persist();
+  } catch { /* navegador sem suporte: segue sem a garantia */ }
+}
+
+// Só avisa quem tem algo a perder — num app recém-aberto o aviso seria ruído.
+function avaliarRiscoDePerda() {
+  const warn = document.getElementById('warn');
+  if (!warn) return;
+
+  let proprios = 0;
+  padsByFolder.forEach(lista => lista.forEach(p => { if (p.fileName) proprios++; }));
+
+  const emRisco = proprios > 0 && !persistente;
+  const dispensado = localStorage.getItem('sp.avisoOff') === '1';
+
+  if (!emRisco || dispensado) { warn.hidden = true; return; }
+
+  document.getElementById('warnText').textContent = (pareceIOS() && !naTelaDeInicio())
+    ? 'Seus sons podem ser apagados pelo iOS depois de alguns dias sem uso. Compartilhar → Adicionar à Tela de Início protege.'
+    : 'O navegador pode apagar seus sons se faltar espaço. Vale guardar uma cópia dos arquivos.';
+  warn.hidden = false;
+}
+
+document.getElementById('warnClose')?.addEventListener('click', () => {
+  localStorage.setItem('sp.avisoOff', '1');
+  document.getElementById('warn').hidden = true;
+});
+
 /* ======================= estado ======================= */
 
 let folders = [];                 // [{id, name, kit, order}]
@@ -412,6 +463,7 @@ async function fillPads(inicio, arquivos, { pular = false, aoAndar = () => {} } 
       renderPad(p);
       savePad(p);
       ok++;
+      avaliarRiscoDePerda();
     } catch (e) {
       console.warn('não deu para ler', file.name, e);
       falhas++;
@@ -1100,6 +1152,9 @@ async function boot() {
   const saved = localStorage.getItem('sp.folder');
   await openFolder(folders.some(f => f.id === saved) ? saved : folders[0].id);
   setStatus();
+
+  await pedirPersistencia();
+  avaliarRiscoDePerda();
 }
 
 boot();

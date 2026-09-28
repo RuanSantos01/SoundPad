@@ -19,6 +19,29 @@ local é exatamente o que está publicado.
 
 Publicar uma mudança é só `git push`: o GitHub Pages serve a branch `main`.
 
+## Os sons somem com o tempo?
+
+Eles ficam no IndexedDB, no navegador daquele aparelho. Três riscos, em ordem de
+probabilidade:
+
+1. **Inatividade.** O Safari apaga o armazenamento de sites não visitados por 7 dias.
+2. **Falta de espaço.** O sistema pode despejar dados de sites para liberar disco.
+3. **Limpeza manual.** "Limpar Histórico e Dados dos Sites" leva tudo junto.
+
+Contra os dois primeiros o app pede `navigator.storage.persist()` ao abrir. Medido no
+Safari do iOS (simulador, iPhone 16 Pro):
+
+| Como o app foi aberto | `persist()` |
+|---|---|
+| Aba normal do Safari | **negado** |
+| Ícone na Tela de Início (standalone) | **concedido** |
+
+Ou seja: **adicionar à Tela de Início é o que protege os sons**, não só conforto de tela
+cheia. Quando o pedido é negado e existem sons próprios carregados, o app mostra um aviso.
+
+Contra o terceiro risco (limpeza manual, ou apagar o ícone) não há API que ajude — só uma
+cópia dos arquivos originais resolve.
+
 ## Primeiro toque
 
 O iOS abre toda página com o áudio suspenso. O primeiro toque em qualquer lugar destrava —
