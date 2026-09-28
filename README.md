@@ -2,21 +2,27 @@
 
 Pads de som que tocam no instante do toque, direto no navegador — incluindo o Safari do iPhone.
 
-## Rodar
+**No ar em https://ruansantos01.github.io/SoundPad/**
+
+No iPhone: abra esse endereço no Safari e faça **Compartilhar → Adicionar à Tela de Início**.
+Vira um app em tela cheia que funciona offline.
+
+## Rodar localmente
 
 ```bash
 node serve.mjs
 ```
 
 O terminal mostra dois endereços: um para este Mac e um para o iPhone (precisa estar no
-mesmo Wi-Fi). Não há dependências nem build — é HTML, CSS e JS puros.
+mesmo Wi-Fi). Não há dependências nem build — é HTML, CSS e JS puros, então o que roda
+local é exatamente o que está publicado.
 
-## Usar no iPhone
+Publicar uma mudança é só `git push`: o GitHub Pages serve a branch `main`.
 
-1. Abra o endereço `http://192.168.x.x:8000` no Safari.
-2. Toque em qualquer pad — o primeiro toque destrava o áudio (regra do iOS).
-3. Para virar app de verdade: **Compartilhar → Adicionar à Tela de Início**. Abre em tela
-   cheia, sem barra do Safari, e funciona offline.
+## Primeiro toque
+
+O iOS abre toda página com o áudio suspenso. O primeiro toque em qualquer lugar destrava —
+o pad que você tocar já sai com som, não é um toque desperdiçado.
 
 ## Pastas
 
