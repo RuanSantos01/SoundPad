@@ -88,3 +88,22 @@ AirPods.
 | `styles.css` | visual |
 | `sw.js` + `manifest.webmanifest` | instalação na tela de início e uso offline |
 | `serve.mjs` | servidor local para testar no iPhone |
+| `vercel.json` | cabeçalhos do deploy na Vercel (ver abaixo) |
+
+## Hospedagem
+
+O app é estático: qualquer host serve. Hoje está no GitHub Pages, publicado a cada
+`git push` na `main`.
+
+O `vercel.json` existe para três coisas que quebram um PWA se ficarem no padrão:
+
+- **`sw.js` sem cache.** Se o service worker vier de cache, uma versão antiga do app fica
+  presa no aparelho e nenhum deploy novo chega.
+- **`manifest.webmanifest` com `application/manifest+json`.** Sem o tipo certo o iOS
+  ignora o manifest e o "Adicionar à Tela de Início" perde nome e ícone.
+- **`app.js` / `styles.css` revalidando sempre.** Os nomes não têm hash, então sem isso o
+  navegador segura a versão velha.
+
+Atenção ao trocar de endereço: **cada domínio tem seu próprio armazenamento.** Os sons
+ficam no IndexedDB, que é por origem — o que você carregou em `github.io` não aparece em
+`vercel.app`. Escolha um endereço e fique nele.
