@@ -42,25 +42,56 @@ master.connect(limiter).connect(ctx.destination);
 // iOS 16.4+: toca mesmo com o interruptor de silencioso ativado.
 try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {}
 
-let unlocked = false;
+/* Destrave do áudio no iOS.
+ *
+ * Medido no Safari do iOS (simulador, iPhone 16 Pro): com o contexto suspenso,
+ * `start()` não toca NADA e o `onended` nunca dispara — a voz é descartada em
+ * silêncio. E `ctx.resume()` é assíncrono. Então "resume e toca na linha
+ * seguinte" é uma corrida: às vezes o resume chega a tempo, às vezes não.
+ * Era essa a causa do som falhar de forma intermitente.
+ *
+ * Além disso, ir para o segundo plano suspende o contexto TODA vez, e o iOS só
+ * deixa retomar dentro de um gesto do usuário — por isso o resume no
+ * visibilitychange não resolve sozinho.
+ *
+ * Esta função precisa ser chamada DENTRO do gesto. Devolve a promessa do
+ * resume para quem quiser esperar o contexto voltar antes de tocar. */
+function destravar() {
+  let pronto;
+  try { pronto = ctx.resume(); } catch {}
+
+  // O buffer mudo é o que de fato convence o iOS; o resume sozinho não basta.
+  try {
+    const mudo = ctx.createBufferSource();
+    mudo.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+    mudo.connect(ctx.destination);
+    mudo.start(0);
+  } catch {}
+
+  // Reafirmado a cada destrave: uma interrupção (ligação, outro app) pode
+  // derrubar a categoria da sessão de áudio.
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {}
+
+  return (pronto && pronto.then ? pronto : Promise.resolve()).then(setStatus, setStatus);
+}
+
 function unlock() {
-  if (ctx.state !== 'running') ctx.resume();
-  if (unlocked) return;
-  // Um buffer mudo tocado dentro do gesto do usuário destrava o áudio no iOS.
-  const s = ctx.createBufferSource();
-  s.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
-  s.connect(ctx.destination);
-  s.start(0);
-  unlocked = true;
-  setStatus();
+  if (ctx.state !== 'running') destravar();
 }
 ['touchstart', 'touchend', 'pointerdown', 'mousedown', 'keydown'].forEach(ev =>
   document.addEventListener(ev, unlock, { capture: true, passive: true }));
 
-// Voltar de segundo plano suspende o contexto no iOS.
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && ctx.state !== 'running') ctx.resume().then(setStatus, () => {});
-});
+/* Voltar do segundo plano suspende o contexto no iOS. Tentar retomar aqui às
+ * vezes funciona; quando não funciona (o iOS exige um gesto), o indicador fica
+ * cinza e o próximo toque resolve — sem perder o som, graças ao trigger(). */
+function aoVoltar() {
+  if (document.hidden) { setStatus(); return; }
+  if (ctx.state === 'running') { setStatus(); return; }
+  try { ctx.resume().then(setStatus, setStatus); } catch { setStatus(); }
+}
+document.addEventListener('visibilitychange', aoVoltar);
+window.addEventListener('pageshow', aoVoltar);
+window.addEventListener('focus', aoVoltar);
 ctx.addEventListener?.('statechange', setStatus);
 
 function setStatus() {
@@ -530,10 +561,19 @@ function trigger(i) {
   const p = pads[i];
   if (!p || isEmpty(p)) return;
 
-  // Segurança: se o iOS suspendeu o contexto, retoma antes de disparar.
-  if (ctx.state !== 'running') ctx.resume();
-
   if (p.mode === 'loop' && p.voices.length) { stopPad(p); flash(p); return; }
+
+  flash(p);                         // resposta visual imediata, mesmo se o áudio atrasar
+
+  if (ctx.state === 'running') { dispararVoz(p); return; }
+
+  // Contexto caído (voltou do segundo plano, ligação, outro app tomou o áudio):
+  // destrava agora, dentro do gesto, e só dispara quando ele estiver de pé —
+  // disparar antes jogaria o som fora.
+  destravar().then(() => { if (ctx.state === 'running') dispararVoz(p); });
+}
+
+function dispararVoz(p) {
   if (p.choke || p.mode !== 'oneshot') stopPad(p, 0.006);
 
   const src = ctx.createBufferSource();
@@ -554,7 +594,6 @@ function trigger(i) {
 
   src.start();                      // sem delay: toca no próximo bloco de áudio
   p.el?.classList.add('playing');
-  flash(p);
   updateStopCount();
 }
 

@@ -42,10 +42,20 @@ cheia. Quando o pedido é negado e existem sons próprios carregados, o app most
 Contra o terceiro risco (limpeza manual, ou apagar o ícone) não há API que ajude — só uma
 cópia dos arquivos originais resolve.
 
-## Primeiro toque
+## Primeiro toque, e volta do segundo plano
 
-O iOS abre toda página com o áudio suspenso. O primeiro toque em qualquer lugar destrava —
-o pad que você tocar já sai com som, não é um toque desperdiçado.
+O iOS abre toda página com o áudio suspenso, e **suspende de novo toda vez que o app vai
+para segundo plano** (trocar de app, ligação, bloquear a tela). O indicador ao lado do
+título fica cinza quando isso acontece.
+
+O toque seguinte resolve, e o som desse toque sai — não é um toque desperdiçado. Isso
+exigiu cuidado: medido no Safari do iOS, com o contexto suspenso o `start()` não toca nada
+e o `onended` nunca dispara, ou seja, **a voz é descartada em silêncio**. Como `resume()`
+é assíncrono, "retomar e tocar na linha seguinte" era uma corrida que às vezes perdia — era
+essa a causa do som falhar de forma intermitente.
+
+Hoje o `trigger()` dispara na hora quando o contexto está de pé, e quando não está,
+destrava dentro do gesto e só solta a voz depois que o contexto volta.
 
 ## Pastas
 
