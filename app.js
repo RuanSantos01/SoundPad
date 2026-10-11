@@ -39,8 +39,19 @@ limiter.release.value = 0.12;
 
 master.connect(limiter).connect(ctx.destination);
 
-// iOS 16.4+: toca mesmo com o interruptor de silencioso ativado.
-try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {}
+/* NÃO force navigator.audioSession.type = 'playback' aqui.
+ *
+ * A ideia era tocar mesmo com a chavinha de silencioso ligada. Medido no
+ * Safari do iOS, com contextos novos e idênticos:
+ *
+ *   auto      -> estado running,     som imediato (base 2.7 ms)
+ *   playback  -> estado INTERRUPTED, não toca nada
+ *
+ * A latência de buffer é a mesma nos dois; 'playback' simplesmente derruba a
+ * sessão. Era a causa do som sair atrasado, errático, ou não sair.
+ *
+ * Preço de ficar no padrão: com o silencioso ligado o iOS pode calar o áudio.
+ * Vale muito mais que um app que não toca. */
 
 /* Destrave do áudio no iOS.
  *
@@ -67,10 +78,6 @@ function destravar() {
     mudo.connect(ctx.destination);
     mudo.start(0);
   } catch {}
-
-  // Reafirmado a cada destrave: uma interrupção (ligação, outro app) pode
-  // derrubar a categoria da sessão de áudio.
-  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {}
 
   return (pronto && pronto.then ? pronto : Promise.resolve()).then(setStatus, setStatus);
 }

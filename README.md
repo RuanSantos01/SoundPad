@@ -105,8 +105,18 @@ voltam sempre que você reabrir.
 - **Evento `touchstart`, não `click`.** O iOS só emite `click` no fim do toque, e com
   atraso. Medido aqui: **0,2 ms** entre o toque e o disparo.
 - **`latencyHint: 'interactive'`** pede ao sistema o menor buffer de saída possível.
-- **`navigator.audioSession = 'playback'`** (iOS 16.4+) faz o som tocar mesmo com a
-  chavinha de silencioso ligada. Em iOS mais antigo, desligue o silencioso.
+- **Não forçamos `navigator.audioSession.type`.** A tentação é usar `'playback'` para
+  tocar com a chavinha de silencioso ligada. Medido no Safari do iOS, com dois contextos
+  novos e idênticos:
+
+  | `audioSession` | estado | tocou |
+  |---|---|---|
+  | `auto` (padrão) | `running` | sim, imediato |
+  | `playback` | `interrupted` | **não** |
+
+  O buffer de saída é o mesmo nos dois (2,7 ms): `'playback'` simplesmente derruba a
+  sessão. Preço de ficar no padrão: **com o silencioso ligado o iOS pode calar o som** —
+  se um pad não sair, confira a chavinha lateral.
 
 O que sobra é a latência do próprio hardware de saída (~20–40 ms no iPhone, e mais se for
 por Bluetooth). Fone com fio ou o alto-falante do aparelho respondem bem mais rápido que
