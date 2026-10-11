@@ -75,7 +75,74 @@ function destravar() {
   return (pronto && pronto.then ? pronto : Promise.resolve()).then(setStatus, setStatus);
 }
 
+/* ---- mantenedor da sessão de áudio ----
+ *
+ * O problema de raiz: para o iOS, Web Audio sozinho é som "acessório" e a
+ * sessão morre quando o app sai de foco. Um app de música não sofre disso
+ * porque o sistema o enxerga como MEDIA PLAYBACK.
+ *
+ * Um <audio> em loop (praticamente mudo) segura essa sessão de pé. Enquanto
+ * ele toca, o AudioContext não é suspenso ao trocar de app, atender ligação ou
+ * bloquear a tela — o pad responde na hora, sem gastar um toque para destravar.
+ *
+ * O áudio dos pads continua saindo direto pelo ctx.destination, que é o caminho
+ * de menor latência; este elemento não entra na cadeia de som. */
+
+function wavQuaseMudo(segundos = 2, sr = 8000) {
+  const n = sr * segundos, b = new ArrayBuffer(44 + n * 2), v = new DataView(b);
+  const txt = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  txt(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); txt(8, 'WAVEfmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  txt(36, 'data'); v.setUint32(40, n * 2, true);
+  // Silêncio absoluto pode ser descartado pelo sistema; 1 LSB é inaudível e real.
+  for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, i % 2 ? 1 : -1, true);
+  let bin = '';
+  const bytes = new Uint8Array(b);
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return 'data:audio/wav;base64,' + btoa(bin);
+}
+
+const mantenedor = new Audio();
+mantenedor.loop = true;
+mantenedor.preload = 'auto';
+mantenedor.volume = 0.02;
+mantenedor.src = wavQuaseMudo();
+mantenedor.setAttribute('playsinline', '');
+
+let sessaoViva = false;
+
+function manterSessao() {
+  if (sessaoViva && !mantenedor.paused) return;
+  const p = mantenedor.play();
+  if (p && p.catch) p.catch(() => { sessaoViva = false; });
+  sessaoViva = true;
+
+  // Sem metadados o iOS mostra controles vazios na tela bloqueada.
+  try {
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: 'SoundPad', artist: 'pads prontos', album: 'SoundPad',
+        artwork: [{ src: 'icon-512.png', sizes: '512x512', type: 'image/png' }],
+      });
+      navigator.mediaSession.playbackState = 'playing';
+      // Os botões do sistema não devem matar a sessão.
+      const nada = () => {};
+      navigator.mediaSession.setActionHandler('play', () => { manterSessao(); });
+      navigator.mediaSession.setActionHandler('pause', nada);
+      navigator.mediaSession.setActionHandler('stop', nada);
+      navigator.mediaSession.setActionHandler('previoustrack', nada);
+      navigator.mediaSession.setActionHandler('nexttrack', nada);
+    }
+  } catch {}
+}
+
+// Se o sistema pausar o mantenedor (interrupção), levanta de novo.
+mantenedor.addEventListener('pause', () => { if (sessaoViva) setTimeout(manterSessao, 120); });
+
 function unlock() {
+  manterSessao();
   if (ctx.state !== 'running') destravar();
 }
 ['touchstart', 'touchend', 'pointerdown', 'mousedown', 'keydown'].forEach(ev =>
@@ -375,6 +442,7 @@ async function savePad(p) {
       folderId: p.folderId,
       i: p.id,
       name: p.name, color: p.color, mode: p.mode, vol: p.vol, choke: p.choke,
+      defIdx: p.defIdx ?? null,
       blob: p.blobRef || null, fileName: p.fileName,
     });
   } catch (e) { console.warn('não deu para salvar o pad', e); }
@@ -451,6 +519,10 @@ function makePads(folder) {
     mode: 'oneshot',
     vol: 1,
     choke: true,
+    // defIdx acompanha o pad quando ele troca de lugar; antes o som padrão era
+    // amarrado à posição e a troca embaralhava os nomes.
+    defIdx: folder.kit === 'drums' ? i : null,
+    defName: folder.kit === 'drums' ? BANK[i].name : '',
     buffer: folder.kit === 'drums' ? defaultBuffers[i] || null : null,
     defBuffer: folder.kit === 'drums' ? defaultBuffers[i] || null : null,
     fileName: null,
@@ -528,6 +600,12 @@ async function getPads(folder) {
     if (rec.mode) p.mode = rec.mode;
     if (typeof rec.vol === 'number') p.vol = rec.vol;
     if (typeof rec.choke === 'boolean') p.choke = rec.choke;
+    if (rec.defIdx !== undefined) {
+      p.defIdx = rec.defIdx;
+      p.defBuffer = rec.defIdx === null ? null : (defaultBuffers[rec.defIdx] || null);
+      p.defName = rec.defIdx === null ? '' : BANK[rec.defIdx].name;
+      if (!rec.blob) p.buffer = p.defBuffer;
+    }
     if (rec.blob) {
       try {
         await loadCustom(p, rec.blob, rec.fileName || 'som');
@@ -837,8 +915,11 @@ grid.addEventListener('touchstart', e => {
     if (!el) continue;
     e.preventDefault();             // mata o zoom de duplo toque e o click fantasma
     const i = +el.dataset.i;
+    // No modo editar o gesto é do arrasto (ver abaixo): toque parado abre os
+    // ajustes, toque que anda troca os pads de lugar.
+    if (editing) continue;
     // Pad vazio leva direto para os ajustes: é o único jeito de dar som a ele.
-    if (editing || isEmpty(pads[i])) { openSheet(i); continue; }
+    if (isEmpty(pads[i])) { openSheet(i); continue; }
     activeTouches.set(t.identifier, i);
     trigger(i);
   }
@@ -854,6 +935,79 @@ function endTouch(e) {
 grid.addEventListener('touchend', endTouch);
 grid.addEventListener('touchcancel', endTouch);
 
+/* ---- arrastar pads para trocar de lugar (só no modo editar) ----
+ * Mesma regra da barra de pastas: parado abre os ajustes, andando arrasta.
+ * A troca é por permuta — o pad de destino vem para a origem. Numa grade de
+ * 4x4 isso é o que o dedo espera; "empurrar todos" embaralharia o resto. */
+
+const LIMIAR_PAD = 10;
+let dragPad = null;
+
+grid.addEventListener('pointerdown', e => {
+  if (!editing || e.button > 0 || dragPad) return;
+  const el = e.target.closest('.pad');
+  if (!el) return;
+  dragPad = { el, i: +el.dataset.i, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, andou: false, alvo: null };
+  window.addEventListener('pointermove', aoMoverPad, { passive: false });
+  window.addEventListener('pointerup', encerrarPad);
+  window.addEventListener('pointercancel', encerrarPad);
+});
+
+function aoMoverPad(e) {
+  if (!dragPad || e.pointerId !== dragPad.pointerId) return;
+  const dx = e.clientX - dragPad.startX;
+  const dy = e.clientY - dragPad.startY;
+
+  if (!dragPad.andou) {
+    if (Math.hypot(dx, dy) < LIMIAR_PAD) return;
+    dragPad.andou = true;
+    dragPad.el.classList.add('arrastando');
+    document.body.classList.add('dragging-pad');
+  }
+  e.preventDefault();
+  dragPad.el.style.transform = `translate(${dx}px, ${dy}px)`;
+
+  // Descobre sobre qual pad o dedo está, ignorando o que está sendo arrastado.
+  dragPad.el.style.pointerEvents = 'none';
+  const sob = document.elementFromPoint(e.clientX, e.clientY)?.closest('.pad');
+  dragPad.el.style.pointerEvents = '';
+
+  if (sob !== dragPad.alvo) {
+    dragPad.alvo?.classList.remove('alvo');
+    dragPad.alvo = sob && sob !== dragPad.el ? sob : null;
+    dragPad.alvo?.classList.add('alvo');
+  }
+}
+
+function encerrarPad(e) {
+  if (!dragPad || (e && e.pointerId !== dragPad.pointerId)) return;
+  const { el, i, andou, alvo } = dragPad;
+  dragPad = null;
+  window.removeEventListener('pointermove', aoMoverPad);
+  window.removeEventListener('pointerup', encerrarPad);
+  window.removeEventListener('pointercancel', encerrarPad);
+
+  el.style.transform = '';
+  el.classList.remove('arrastando');
+  alvo?.classList.remove('alvo');
+  document.body.classList.remove('dragging-pad');
+
+  if (!andou) { openSheet(i); return; }
+  if (alvo) trocarPads(pads[i], pads[+alvo.dataset.i]);
+}
+
+// Troca o conteúdo de dois pads. Os elementos ficam onde estão; o que anda é o
+// som e tudo que o descreve.
+function trocarPads(a, b) {
+  if (!a || !b || a === b) return;
+  stopPad(a); stopPad(b);
+  for (const k of ['name', 'color', 'mode', 'vol', 'choke', 'defIdx', 'defName', 'buffer', 'defBuffer', 'fileName', 'blobRef']) {
+    const t = a[k]; a[k] = b[k]; b[k] = t;
+  }
+  renderPad(a); renderPad(b);
+  savePad(a); savePad(b);
+}
+
 /* ---- mouse (desktop) ---- */
 
 let mouseIndex = null;
@@ -863,7 +1017,8 @@ grid.addEventListener('mousedown', e => {
   if (!el) return;
   e.preventDefault();
   const i = +el.dataset.i;
-  if (editing || isEmpty(pads[i])) { openSheet(i); return; }
+  if (editing) return;
+  if (isEmpty(pads[i])) { openSheet(i); return; }
   mouseIndex = i;
   trigger(i);
 });
@@ -945,7 +1100,7 @@ PALETTE.forEach(c => {
 
 function padSourceLabel(p) {
   if (p.fileName) return '♫ ' + p.fileName;
-  if (p.defBuffer) return 'som padrão (' + BANK[p.id].name + ')';
+  if (p.defBuffer) return 'som padrão (' + (p.defName || '—') + ')';
   return 'nenhum som — escolha um arquivo';
 }
 
@@ -972,7 +1127,7 @@ document.getElementById('fDone').addEventListener('click', closeSheet);
 
 fName.addEventListener('input', () => {
   if (!current) return;
-  current.name = fName.value.trim() || (current.defBuffer ? BANK[current.id].name : '');
+  current.name = fName.value.trim() || (current.defBuffer ? current.defName : '');
   renderPad(current); savePad(current);
 });
 
@@ -1039,7 +1194,7 @@ fReset.addEventListener('click', () => {
   p.buffer = p.defBuffer;
   p.fileName = null;
   p.blobRef = null;
-  p.name = p.defBuffer ? BANK[p.id].name : '';
+  p.name = p.defBuffer ? p.defName : '';
   fName.value = p.name;
   fFile.textContent = padSourceLabel(p);
   fReset.hidden = !p.defBuffer;
@@ -1170,7 +1325,33 @@ gDelete.addEventListener('click', async () => {
 /* ======================= service worker (offline) ======================= */
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  // Se um SW novo assumir o controle, recarrega UMA vez: sem isso a aba segue
+  // rodando o código velho até ser fechada, e o usuário fica preso numa versão
+  // antiga sem ter como perceber.
+  let jaRecarregou = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (jaRecarregou) return;
+    jaRecarregou = true;
+    location.reload();
+  });
+
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('sw.js');
+      reg.update();
+      // Procura atualização ao voltar para o app, não só no carregamento.
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) reg.update().catch(() => {});
+      });
+      reg.addEventListener('updatefound', () => {
+        reg.installing?.addEventListener('statechange', function () {
+          if (this.state === 'installed' && navigator.serviceWorker.controller) {
+            this.postMessage?.('pular-espera');
+          }
+        });
+      });
+    } catch {}
+  });
 }
 
 /* ======================= início ======================= */
