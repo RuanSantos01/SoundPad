@@ -28,14 +28,27 @@ const ctx = new AC({ latencyHint: 'interactive' });
 const master = ctx.createGain();
 master.gain.value = 0.9;
 
-// Limitador de segurança: vários pads somados (ou um arquivo já bem alto)
-// estouram o 0 dBFS e distorcem. Isso segura sem alterar o som normal.
-const limiter = ctx.createDynamicsCompressor();
-limiter.threshold.value = -2;
-limiter.knee.value = 0;
-limiter.ratio.value = 20;
-limiter.attack.value = 0.002;
-limiter.release.value = 0.12;
+/* Limitador de segurança: vários pads somados (ou um arquivo já bem alto)
+ * estouram o 0 dBFS e distorcem.
+ *
+ * Era um DynamicsCompressor, trocado por um saturador em WaveShaper. Medido no
+ * Safari do iOS e no Chromium, o compressor custa 6 ms de atraso na entrada e
+ * 6 ms de cauda depois que a fonte para — ele atrasa tudo para antecipar picos.
+ * O WaveShaper faz a conta amostra a amostra: zero atraso, zero cauda.
+ * (oversample precisa ser 'none'; 2x/4x reintroduzem atraso.) */
+const limiter = ctx.createWaveShaper();
+limiter.oversample = 'none';
+limiter.curve = (() => {
+  const n = 2048, c = new Float32Array(n), joelho = 0.7;
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    const a = Math.abs(x);
+    // Transparente abaixo do joelho; acima, comprime suave e nunca passa de 1.
+    const y = a <= joelho ? a : joelho + (1 - joelho) * Math.tanh((a - joelho) / (1 - joelho));
+    c[i] = Math.sign(x) * y;
+  }
+  return c;
+})();
 
 master.connect(limiter).connect(ctx.destination);
 
@@ -1021,11 +1034,24 @@ window.addEventListener('keyup', e => {
 const btnEdit = document.getElementById('btnEdit');
 const hint = document.getElementById('hint');
 
+/* Latência real DESTE aparelho e DESTA saída de áudio. Fone Bluetooth costuma
+ * somar 150-300 ms, e nenhuma linha de código muda isso — ter o número na tela
+ * evita caçar fantasma no app quando o atraso está no caminho do som. */
+function latenciaDaSaida() {
+  const base = (ctx.baseLatency || 0) * 1000;
+  const saida = (ctx.outputLatency || 0) * 1000;
+  const total = Math.round(base + saida);
+  if (!total) return 'saída < 1 ms';
+  return `saída ~${total} ms` + (total > 60 ? ' (fone sem fio?)' : '');
+}
+
 btnEdit.addEventListener('click', () => {
   editing = !editing;
   btnEdit.setAttribute('aria-pressed', String(editing));
   document.body.classList.toggle('editing', editing);
-  hint.textContent = editing ? 'Toque num pad ou pasta para ajustar' : 'Toque em um pad';
+  hint.textContent = editing
+    ? 'Ajustar · ' + latenciaDaSaida()
+    : (ctx.state === 'running' ? 'Toque em um pad' : 'Toque para ativar o som');
 });
 
 btnStop.addEventListener('click', stopAll);

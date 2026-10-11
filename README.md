@@ -118,9 +118,14 @@ voltam sempre que você reabrir.
   sessão. Preço de ficar no padrão: **com o silencioso ligado o iOS pode calar o som** —
   se um pad não sair, confira a chavinha lateral.
 
-O que sobra é a latência do próprio hardware de saída (~20–40 ms no iPhone, e mais se for
-por Bluetooth). Fone com fio ou o alto-falante do aparelho respondem bem mais rápido que
-AirPods.
+- **O limitador é um WaveShaper, não um DynamicsCompressor.** Medido nos dois motores, o
+  compressor custa 6 ms de atraso na entrada e 6 ms de cauda depois que a fonte para —
+  ele atrasa tudo para antecipar picos. O WaveShaper satura amostra a amostra: zero
+  atraso, zero cauda, e ainda segura pico de 2,5 em 0,93.
+
+O que sobra é a latência do próprio hardware de saída. **Entre em Editar para ver o número
+do seu aparelho** — o app mostra `saída ~N ms`. Alto-falante ou fone com fio ficam na casa
+de 10–40 ms; fone Bluetooth costuma somar 150–300 ms, e nenhuma linha de código muda isso.
 
 ## Arquivos
 
