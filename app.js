@@ -75,74 +75,17 @@ function destravar() {
   return (pronto && pronto.then ? pronto : Promise.resolve()).then(setStatus, setStatus);
 }
 
-/* ---- mantenedor da sessão de áudio ----
+/* Tentativa descartada: um <audio> quase mudo em loop, para o iOS enxergar o
+ * app como media playback (o truque que faz um player de música nunca perder a
+ * sessão). Medido no Safari do iOS: o play() do elemento morre com AbortError e
+ * o AudioContext vai de running direto para `interrupted` — começar um elemento
+ * de mídia ao lado de um contexto ativo faz a WebKit renegociar a sessão e
+ * derrubar o contexto. O remédio era pior que a doença.
  *
- * O problema de raiz: para o iOS, Web Audio sozinho é som "acessório" e a
- * sessão morre quando o app sai de foco. Um app de música não sofre disso
- * porque o sistema o enxerga como MEDIA PLAYBACK.
- *
- * Um <audio> em loop (praticamente mudo) segura essa sessão de pé. Enquanto
- * ele toca, o AudioContext não é suspenso ao trocar de app, atender ligação ou
- * bloquear a tela — o pad responde na hora, sem gastar um toque para destravar.
- *
- * O áudio dos pads continua saindo direto pelo ctx.destination, que é o caminho
- * de menor latência; este elemento não entra na cadeia de som. */
-
-function wavQuaseMudo(segundos = 2, sr = 8000) {
-  const n = sr * segundos, b = new ArrayBuffer(44 + n * 2), v = new DataView(b);
-  const txt = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
-  txt(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); txt(8, 'WAVEfmt ');
-  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
-  v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true);
-  v.setUint16(32, 2, true); v.setUint16(34, 16, true);
-  txt(36, 'data'); v.setUint32(40, n * 2, true);
-  // Silêncio absoluto pode ser descartado pelo sistema; 1 LSB é inaudível e real.
-  for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, i % 2 ? 1 : -1, true);
-  let bin = '';
-  const bytes = new Uint8Array(b);
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return 'data:audio/wav;base64,' + btoa(bin);
-}
-
-const mantenedor = new Audio();
-mantenedor.loop = true;
-mantenedor.preload = 'auto';
-mantenedor.volume = 0.02;
-mantenedor.src = wavQuaseMudo();
-mantenedor.setAttribute('playsinline', '');
-
-let sessaoViva = false;
-
-function manterSessao() {
-  if (sessaoViva && !mantenedor.paused) return;
-  const p = mantenedor.play();
-  if (p && p.catch) p.catch(() => { sessaoViva = false; });
-  sessaoViva = true;
-
-  // Sem metadados o iOS mostra controles vazios na tela bloqueada.
-  try {
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: 'SoundPad', artist: 'pads prontos', album: 'SoundPad',
-        artwork: [{ src: 'icon-512.png', sizes: '512x512', type: 'image/png' }],
-      });
-      navigator.mediaSession.playbackState = 'playing';
-      // Os botões do sistema não devem matar a sessão.
-      const nada = () => {};
-      navigator.mediaSession.setActionHandler('play', () => { manterSessao(); });
-      navigator.mediaSession.setActionHandler('pause', nada);
-      navigator.mediaSession.setActionHandler('stop', nada);
-      navigator.mediaSession.setActionHandler('previoustrack', nada);
-      navigator.mediaSession.setActionHandler('nexttrack', nada);
-    }
-  } catch {}
-}
-
-// Se o sistema pausar o mantenedor (interrupção), levanta de novo.
-mantenedor.addEventListener('pause', () => { if (sessaoViva) setTimeout(manterSessao, 120); });
+ * O que de fato segura: audioSession = 'playback' (aplicado em destravar) mais
+ * a recuperação dentro do gesto. */
 
 function unlock() {
-  manterSessao();
   if (ctx.state !== 'running') destravar();
 }
 ['touchstart', 'touchend', 'pointerdown', 'mousedown', 'keydown'].forEach(ev =>
@@ -163,6 +106,19 @@ ctx.addEventListener?.('statechange', setStatus);
 
 function setStatus() {
   const live = ctx.state === 'running';
+
+  /* Quando o contexto cai (suspended/interrupted) as vozes no ar morrem sem
+   * disparar `onended`. Sem limpar aqui, o app fica mostrando pad aceso e
+   * "Parar (1)" com tudo mudo — e um pad em loop nunca mais religa. */
+  if (!live && typeof padsByFolder !== 'undefined') {
+    padsByFolder.forEach(lista => lista.forEach(p => {
+      if (!p.voices.length) return;
+      p.voices = [];
+      p.el?.classList.remove('playing');
+    }));
+    if (typeof updateStopCount === 'function') updateStopCount();
+  }
+
   document.getElementById('statusDot').classList.toggle('live', live);
   // No iOS a página sempre abre com o áudio suspenso até o primeiro toque.
   const h = document.getElementById('hint');
